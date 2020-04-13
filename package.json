@@ -10,7 +10,9 @@
   "license": "MIT",
   "dependencies": {
     "ip": "^1.1.5",
+    "lodash": "^4.17.15",
     "pcap": "^3.1.0",
-    "raw-socket": "^1.7.0"
+    "raw-socket": "^1.7.0",
+    "why-is-node-running": "^2.1.2"
   }
 }
