@@ -77,6 +77,16 @@ class Probe {
         this.port = port;
         return this;
     }
+
+    getAck() {
+        return (BigInt(this.tcpBuffer[8]) << 24n) + (BigInt(this.tcpBuffer[9]) << 16n) +
+            (BigInt(this.tcpBuffer[10]) << 8n) + BigInt(this.tcpBuffer[11]);
+    }
+
+    getSeq() {
+        return (BigInt(this.tcpBuffer[4]) << 24n) + (BigInt(this.tcpBuffer[5]) << 16n) +
+            (BigInt(this.tcpBuffer[6]) << 8n) + BigInt(this.tcpBuffer[7]);
+    }
 }
 
 const probes = {
