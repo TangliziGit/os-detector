@@ -1,8 +1,13 @@
 const _ = require('lodash');
 const fs = require('fs');
 const readline = require('readline');
+const probeSet = require('./probes.js');
 const sender = require('./sender.js');
 const sniffer = require('./sniffer.js');
+
+const srcIp = '192.168.0.103';
+const dstIp = '39.106.185.26';
+const dbPath = 'nmap-os-db';
 
 let db = [];
 
@@ -100,31 +105,35 @@ const matchOS = (fingerprint) => {
         results.push([idx, matchCount]);
     }
 
-    const osList = results
-        .sort((a, b) => b[1]-a[1])
+    return results
+        .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
         .map(x => [db[x[0]]['name'], x[1]]);
-
-    return osList;
 };
 
 const main = async () => {
-    const probeTypes = ["T2", "T3", "T4", "T5", "T6", "T7"];
+    const probes = probeSet.setPort([80, 3000]);
+    const probeNames = Object.keys(probes);
     let srcPort = 60000;
     let promises = [];
-    let fingerprints = {};
+    let fingerprint = {};
 
-    const loadDbPromise = loadDb('nmap-os-db');
-    for (let probeType of probeTypes) {
-        promises.push(sniffer.sniff(`tcp dst port ${srcPort}`, probeType));
-        sender.send('192.168.0.103', srcPort, '39.106.185.26', 3000, probeType);
+    const loadDbPromise = loadDb(dbPath);
+    for (const name of probeNames) {
+        const probe = probes[name];
+        promises.push(sniffer.sniff(`tcp dst port ${srcPort}`, probe));
+        sender.send(srcIp, srcPort, dstIp, probe);
         srcPort += 1;
     }
 
-    (await Promise.all(promises)).forEach((elem, idx) => fingerprints[probeTypes[idx]] = elem);
+    (await Promise.all(promises))
+        .forEach((elem, idx) =>
+            fingerprint[probeNames[idx]] = elem
+        );
 
     await loadDbPromise;
-    const os = matchOS(fingerprints);
+    const os = matchOS(fingerprint);
+
     console.log(os);
     process.exit(0);
 };

@@ -57,11 +57,11 @@ const analyser = {
     "T7": tcpAnalyser,
 };
 
-const sniff = async (filter, probeType) => {
+const sniff = async (filter, probe) => {
     const ipPacket = await listen(filter);
-    const fingerprint = analyser[probeType](ipPacket);
+    const fingerprint = analyser[probe.name](ipPacket);
 
-    console.log(probeType, fingerprint);
+    console.log(probe.name, probe.port, fingerprint);
     return fingerprint;
 };
 
