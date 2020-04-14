@@ -1,5 +1,6 @@
 const _ = require('lodash');
 const fs = require('fs');
+const spawn = require('child_process').spawn;
 const readline = require('readline');
 const probeSet = require('./probes.js');
 const sender = require('./sender.js');
@@ -111,8 +112,29 @@ const matchOS = (fingerprint) => {
         .map(x => [db[x[0]]['name'], x[1]]);
 };
 
+const getDstPorts = async (dstIp) => {
+    const scanner = spawn('nmap', ['-d', '-d', dstIp]);
+    const liner = readline.createInterface({
+        input: scanner.stdout
+    });
+
+    const closeRegex = /Discovered closed port ([0-9]+?)\/tcp/g;
+    const openRegex = /Discovered open port ([0-9]+?)\/tcp/g;
+    let [open, closed] = [null, null];
+
+    for await (const line of liner) {
+        const result = [closeRegex.exec(line), openRegex.exec(line)];
+
+        if (result[0] !== null) closed = result[0][1];
+        if (result[1] !== null) open = result[1][1];
+
+        if (closed !== null && open !== null)
+            return [open, closed];
+    }
+};
+
 const main = async () => {
-    const probes = probeSet.setPort([80, 3000]);
+    const probes = probeSet.setPort(await getDstPorts(dstIp));
     const probeNames = Object.keys(probes);
     let srcPort = 60000;
     let promises = [];

@@ -89,6 +89,7 @@ const probes = {
 };
 
 const setPort = ([opening, closed]) => {
+    console.log(`opening: ${opening}, closed: ${closed}`);
     for (const name of Object.keys(probes)) {
         const probe = probes[name];
         if (probe.portOpening)
