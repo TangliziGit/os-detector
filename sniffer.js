@@ -2,7 +2,7 @@ const pcap = require('pcap');
 
 const WAIT_TIME = 3000;
 
-const listen = (filter) => {
+const listen = (filter, probe) => {
     const session = pcap.createSession('wlp3s0', { filter: filter });
 
     return new Promise((resolve) => {
@@ -12,8 +12,10 @@ const listen = (filter) => {
             const packet = pcap.decode.packet(raw_packet);
             const ip = packet.payload.payload;
 
-            captured = true;
-            resolve(ip);
+            if (probe.type !== 'ICMP' || probe.getIpLength() === ip.length) {
+                captured = true;
+                resolve(ip);
+            }
         });
 
         setTimeout(function () {
@@ -40,13 +42,13 @@ const tcpAnalyser = (ipPacket, probe) => {
 
     let S = 'O';
     if (tcpPacket.seqno === 0) S = 'Z';
-    else if (BigInt(tcpPacket.seqno) === probe.getAck()) S = 'A';
-    else if (BigInt(tcpPacket.seqno) === probe.getAck() + 1n) S = 'A+';
+    else if (BigInt(tcpPacket.seqno) === probe.getTcpAck()) S = 'A';
+    else if (BigInt(tcpPacket.seqno) === probe.getTcpAck() + 1n) S = 'A+';
 
     let A = 'O';
     if (tcpPacket.ackno === 0) A = 'Z';
-    else if (BigInt(tcpPacket.ackno) === probe.getSeq()) A = 'S';
-    else if (BigInt(tcpPacket.ackno) === probe.getSeq() + 1n) A = 'S+';
+    else if (BigInt(tcpPacket.ackno) === probe.getTcpSeq()) A = 'S';
+    else if (BigInt(tcpPacket.ackno) === probe.getTcpSeq() + 1n) A = 'S+';
 
     return {
         "R": "Y",
@@ -58,6 +60,22 @@ const tcpAnalyser = (ipPacket, probe) => {
     };
 };
 
+const icmpAnalyser = (ipPacket, probe) => {
+    if (ipPacket === null) return {"R": "N"};
+
+    const icmpPacket = ipPacket.payload;
+
+    let CD = 'O';
+    if (icmpPacket.code === 0) CD = 'Z';
+    else if (icmpPacket.code === probe.getIcmpCode()) CD = 'S';
+
+    return {
+        "R": "Y",
+        "DFI": false, // ipPacket.flags.doNotFragment,
+        "CD": CD
+    }
+};
+
 const analyser = {
     "T2": tcpAnalyser,
     "T3": tcpAnalyser,
@@ -65,10 +83,12 @@ const analyser = {
     "T5": tcpAnalyser,
     "T6": tcpAnalyser,
     "T7": tcpAnalyser,
+    "IE1": icmpAnalyser,
+    "IE2": icmpAnalyser
 };
 
 const sniff = async (filter, probe) => {
-    const ipPacket = await listen(filter);
+    const ipPacket = await listen(filter, probe);
     const fingerprint = analyser[probe.name](ipPacket, probe);
 
     console.log(probe.name, probe.port, fingerprint);

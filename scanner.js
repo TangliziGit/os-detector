@@ -133,29 +133,82 @@ const getDstPorts = async (dstIp) => {
     }
 };
 
-const main = async () => {
-    const probes = probeSet.setPort(await getDstPorts(dstIp));
+const tcpScanner = (probes) => {
     const probeNames = Object.keys(probes);
     let srcPort = 60000;
     let promises = [];
-    let fingerprint = {};
 
-    const loadDbPromise = loadDb(dbPath);
     for (const name of probeNames) {
         const probe = probes[name];
+        if (probe.type !== "TCP") continue;
+
         promises.push(sniffer.sniff(`tcp dst port ${srcPort}`, probe));
         sender.send(srcIp, srcPort, dstIp, probe);
         srcPort += 1;
     }
 
-    (await Promise.all(promises))
-        .forEach((elem, idx) =>
-            fingerprint[probeNames[idx]] = elem
-        );
+    return promises;
+};
 
+const icmpScanner = (probes) => {
+    const probeNames = Object.keys(probes);
+    let promises = [];
+
+    for (const name of probeNames) {
+        const probe = probes[name];
+        if (probe.type !== "ICMP") continue;
+
+        promises.push(sniffer.sniff(`icmp and src host ${srcIp}`, probe));
+        sender.send(srcIp, null, dstIp, probe);
+    }
+
+    return promises;
+};
+
+const mergeFingerprintItems = (fingerprint) => {
+    const result = fingerprint;
+
+    let DFI = "O";
+    const dfs = [result['IE1'].DFI, result['IE2'].DFI];
+    if (dfs[0] && dfs[1]) DFI = 'Y';
+    else if (!dfs[0] && !dfs[1]) DFI = 'N';
+    else if (dfs[0] && !dfs[1]) DFI = 'S';
+
+    let CD = 'O';
+    const cds = [result['IE1'].CD, result['IE2'].CD];
+    if (cds[0] === 'Z' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'Z';
+    else if (cds[0] === 'S' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'S';
+
+    delete result['IE1'];
+    delete result['IE2'];
+    result['IE'] = {
+        "R": "Y",
+        "DFI": DFI,
+        "CD": CD
+    };
+
+    return result;
+};
+
+const main = async () => {
+    // const probes = probeSet.setPort(await getDstPorts(dstIp));
+    const probes = probeSet.setPort([80, 3000]);
+    const probeNames = Object.keys(probes);
+    const loadDbPromise = loadDb(dbPath);
+
+    const promises = tcpScanner(probes).concat(icmpScanner(probes));
+    // const promises = icmpScanner(probes);
+    let fingerprint = {};
+
+    (await Promise.all(promises)).forEach((elem, idx) =>
+        fingerprint[probeNames[idx]] = elem
+    );
+
+    fingerprint = mergeFingerprintItems(fingerprint);
     await loadDbPromise;
     const os = matchOS(fingerprint);
 
+    console.log(fingerprint);
     console.log(os);
     process.exit(0);
 };
