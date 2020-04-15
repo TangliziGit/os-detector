@@ -1,10 +1,12 @@
+const IcmpProbe = require('./probes').IcmpProbe;
+const TcpProbe = require('./probes').TcpProbe;
 const raw = require("raw-socket");
 
 const send = (srcIp, srcPort, dstIp, probe) => {
     let protocol = null;
-    if (probe.type === "TCP")
+    if (probe instanceof TcpProbe)
         protocol = raw.Protocol.TCP;
-    else if (probe.type === "ICMP")
+    else if (probe instanceof IcmpProbe)
         protocol = raw.Protocol.ICMP;
 
     const socket = raw.createSocket({
@@ -26,9 +28,9 @@ const send = (srcIp, srcPort, dstIp, probe) => {
     };
 
     let buffer = null;
-    if (probe.type === "TCP")
+    if (probe instanceof TcpProbe)
         buffer = probe.getTotalTcpBuffer(srcIp, srcPort, dstIp);
-    else if (probe.type === "ICMP")
+    else if (probe instanceof IcmpProbe)
         buffer = probe.getTotalIcmpBuffer(srcIp, dstIp);
 
     socket.send(buffer, 0, buffer.length, dstIp, beforeSend, afterSend);

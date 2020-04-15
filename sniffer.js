@@ -1,3 +1,4 @@
+const IcmpProbe = require('./probes').IcmpProbe;
 const pcap = require('pcap');
 
 const WAIT_TIME = 3000;
@@ -12,7 +13,7 @@ const listen = (filter, probe) => {
             const packet = pcap.decode.packet(raw_packet);
             const ip = packet.payload.payload;
 
-            if (probe.type !== 'ICMP' || probe.getIpLength() === ip.length) {
+            if (!(probe instanceof IcmpProbe) || probe.getIpLength() === ip.length) {
                 captured = true;
                 resolve(ip);
             }
@@ -50,13 +51,19 @@ const tcpAnalyser = (ipPacket, probe) => {
     else if (BigInt(tcpPacket.ackno) === probe.getTcpSeq()) A = 'S';
     else if (BigInt(tcpPacket.ackno) === probe.getTcpSeq() + 1n) A = 'S+';
 
+    let TG = ipPacket.ttl, bitnum = 0;
+    while (TG !== 1) {bitnum+=1; TG >>= 1;}
+    if ((TG = 1 << bitnum ) < ipPacket.ttl)
+        TG <<= 1;
+
     return {
         "R": "Y",
         "DF": (ipPacket.flags.doNotFragment)? "Y": "N",
-        "W": tcpPacket.windowSize,
+        "W": tcpPacket.windowSize.toString(),
         "S": S,
         "A": A,
         "F": flags,
+        "TG": TG.toString(16)
     };
 };
 
@@ -69,10 +76,16 @@ const icmpAnalyser = (ipPacket, probe) => {
     if (icmpPacket.code === 0) CD = 'Z';
     else if (icmpPacket.code === probe.getIcmpCode()) CD = 'S';
 
+    let TG = ipPacket.ttl, bitnum = 0;
+    while (TG !== 1) {bitnum+=1; TG >>= 1;}
+    if ((TG = 1 << bitnum ) < ipPacket.ttl)
+        TG <<= 1;
+
     return {
         "R": "Y",
         "DFI": false, // ipPacket.flags.doNotFragment,
-        "CD": CD
+        "CD": CD,
+        "TG": TG.toString(16)
     }
 };
 

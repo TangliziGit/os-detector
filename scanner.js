@@ -14,7 +14,7 @@ let db = [];
 
 const loadDb = async (dbPath) => {
     const parseFingerprintItem = (line) => {
-        const regex = /(\w+)=([^%\)]+)/g;
+        const regex = /(\w+)=([^%)]+)/g;
         const item = {};
         let matched;
 
@@ -64,11 +64,11 @@ const loadDb = async (dbPath) => {
                 fingerprint['cpe'] = line.split(':').slice(1).join(':');
                 break;
             default:
-                const name = /[^\(]+/.exec(line)[0];
+                const name = /[^(]+/.exec(line)[0];
                 fingerprint[name] = parseFingerprintItem(line);
                 break;
         }
-    };
+    }
 };
 
 const matchOS = (fingerprint) => {
@@ -179,12 +179,15 @@ const mergeFingerprintItems = (fingerprint) => {
     if (cds[0] === 'Z' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'Z';
     else if (cds[0] === 'S' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'S';
 
+    let TG = result["IE1"].TG;
+
     delete result['IE1'];
     delete result['IE2'];
     result['IE'] = {
         "R": "Y",
         "DFI": DFI,
-        "CD": CD
+        "CD": CD,
+        "TG": TG
     };
 
     return result;
@@ -196,8 +199,7 @@ const main = async () => {
     const probeNames = Object.keys(probes);
     const loadDbPromise = loadDb(dbPath);
 
-    const promises = tcpScanner(probes).concat(icmpScanner(probes));
-    // const promises = icmpScanner(probes);
+    const promises = [tcpScanner(probes), icmpScanner(probes)].flat();
     let fingerprint = {};
 
     (await Promise.all(promises)).forEach((elem, idx) =>
@@ -205,6 +207,7 @@ const main = async () => {
     );
 
     fingerprint = mergeFingerprintItems(fingerprint);
+
     await loadDbPromise;
     const os = matchOS(fingerprint);
 

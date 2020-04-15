@@ -79,25 +79,58 @@ const icmpBuffers = {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
 };
 
-// should be extended by TcpProbe, IcmpProbe
+// use it as an abstract class.
 class Probe {
-    // use it as private method.
-    constructor(type, name, ipBuffer, tcpBuffer, icmpBuffer, portOpening, port = null) {
+    // use it as a protect method.
+    constructor(type, name, ipBuffer) {
         this.type = type;
         this.name = name;
         this.ipBuffer = ipBuffer;
-        this.tcpBuffer = tcpBuffer;
+    }
+
+    getIpLength() {
+        return (this.ipBuffer[2] << 8) + this.ipBuffer[3];
+    }
+}
+
+class IcmpProbe extends Probe {
+    // use it as a private method.
+    constructor(name, ipBuffer, icmpBuffer) {
+        super("ICMP", name, ipBuffer);
         this.icmpBuffer = icmpBuffer;
+    }
+
+    static fromIcmpName(name) {
+        return new IcmpProbe(name, ipBuffers[name], icmpBuffers[name]);
+    }
+
+    getIcmpCode() {
+        return this.icmpBuffer[1];
+    }
+
+    getTotalIcmpBuffer(srcIp, dstIp) {
+        // IP
+        let ipBuffer = this.ipBuffer;
+        ip.toBuffer(srcIp, ipBuffer, 12);
+        ip.toBuffer(dstIp, ipBuffer, 16);
+        raw.writeChecksum(ipBuffer, 10, raw.createChecksum(ipBuffer));
+
+        return Buffer.concat([ipBuffer, this.icmpBuffer]);
+    }
+
+}
+
+class TcpProbe extends Probe {
+    // use it as a private method.
+    constructor(name, ipBuffer, tcpBuffer, portOpening, port = null) {
+        super("TCP", name, ipBuffer);
+        this.tcpBuffer = tcpBuffer;
         this.portOpening = portOpening;
         this.port = port;
     }
 
     static fromTcpName(name, portOpening) {
-        return new Probe("TCP", name, ipBuffers[name], tcpBuffers[name], null, portOpening);
-    }
-
-    static fromIcmpName(name) {
-        return new Probe("ICMP", name, ipBuffers[name], null, icmpBuffers[name], false);
+        return new TcpProbe(name, ipBuffers[name], tcpBuffers[name], portOpening);
     }
 
     setPort(port) {
@@ -105,25 +138,14 @@ class Probe {
         return this;
     }
 
-    getIpLength() {
-        return (this.ipBuffer[2] << 8) + this.ipBuffer[3];
-    }
-
     getTcpAck() {
-        if (this.tcpBuffer === null) return 0n;
         return (BigInt(this.tcpBuffer[8]) << 24n) + (BigInt(this.tcpBuffer[9]) << 16n) +
             (BigInt(this.tcpBuffer[10]) << 8n) + BigInt(this.tcpBuffer[11]);
     }
 
     getTcpSeq() {
-        if (this.tcpBuffer === null) return 0n;
         return (BigInt(this.tcpBuffer[4]) << 24n) + (BigInt(this.tcpBuffer[5]) << 16n) +
             (BigInt(this.tcpBuffer[6]) << 8n) + BigInt(this.tcpBuffer[7]);
-    }
-
-    getIcmpCode() {
-        if (this.icmpBuffer === null) return 0;
-        return this.icmpBuffer[1];
     }
 
     getTotalTcpBuffer(srcIp, srcPort, dstIp) {
@@ -154,38 +176,25 @@ class Probe {
 
         return Buffer.concat([ipBuffer, tcpBuffer]);
     }
-
-    getTotalIcmpBuffer(srcIp, dstIp) {
-        // IP
-        let ipBuffer = this.ipBuffer;
-        ip.toBuffer(srcIp, ipBuffer, 12);
-        ip.toBuffer(dstIp, ipBuffer, 16);
-        raw.writeChecksum(ipBuffer, 10, raw.createChecksum(ipBuffer));
-
-        // ICMP: should not change anything.
-        // let icmpBuffer = this.icmpBuffer;
-        // icmpBuffer.writeUInt16BE(0, 2);
-        // raw.writeChecksum(icmpBuffer, 2, raw.createChecksum(icmpBuffer));
-
-        return Buffer.concat([ipBuffer, this.icmpBuffer]);
-    }
 }
 
 const probes = {
-    "T2": Probe.fromTcpName('T2', true),
-    "T3": Probe.fromTcpName('T3', true),
-    "T4": Probe.fromTcpName('T4', true),
-    "T5": Probe.fromTcpName('T5', false),
-    "T6": Probe.fromTcpName('T6', false),
-    "T7": Probe.fromTcpName('T7', false),
-    "IE1": Probe.fromIcmpName('IE1'),
-    "IE2": Probe.fromIcmpName('IE2'),
+    "T2": TcpProbe.fromTcpName('T2', true),
+    "T3": TcpProbe.fromTcpName('T3', true),
+    "T4": TcpProbe.fromTcpName('T4', true),
+    "T5": TcpProbe.fromTcpName('T5', false),
+    "T6": TcpProbe.fromTcpName('T6', false),
+    "T7": TcpProbe.fromTcpName('T7', false),
+    "IE1": IcmpProbe.fromIcmpName('IE1'),
+    "IE2": IcmpProbe.fromIcmpName('IE2'),
 };
 
 const setPort = ([opening, closed]) => {
     console.log(`opening: ${opening}, closed: ${closed}`);
     for (const name of Object.keys(probes)) {
         const probe = probes[name];
+        if (!(probe instanceof TcpProbe)) continue;
+
         if (probe.portOpening)
             probes[name] = probe.setPort(opening);
         else
@@ -196,4 +205,6 @@ const setPort = ([opening, closed]) => {
 
 module.exports = {
     setPort: setPort,
+    TcpProbe: TcpProbe,
+    IcmpProbe: IcmpProbe
 }
