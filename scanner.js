@@ -59,6 +59,7 @@ const loadDb = async (dbPath) => {
                 break;
             case line.startsWith('Class'):
                 fingerprint['class'] = line.split(' ').slice(1).join(' ');
+                fingerprint['class'] = fingerprint['class'].split('|').map(x => x.trim());
                 break;
             case line.startsWith('CPE'):
                 fingerprint['cpe'] = line.split(':').slice(1).join(':');
@@ -106,9 +107,23 @@ const matchOS = (fingerprint) => {
         results.push([idx, matchCount]);
     }
 
+    // match os without version
+    const os = _(results)
+        .filter(x => db[x[0]]['class'] !== undefined)
+        .filter(x => db[x[0]]['class'][1] !== 'embedded')
+        .groupBy(x => db[x[0]]['class'][1])
+        .mapValues(xs => xs
+            .map(x => x[1])
+            .reduce((x, y) => x+y, 0)
+        ).value();
+
+    // return Object.entries(os)
+    //     .sort((a, b) => b[1] - a[1])
+    //     .slice(0, 20);
     return results
+        .filter(x => db[x[0]]['class'] !== undefined)
+        .filter(x => db[x[0]]['class'][1] !== 'embedded')
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
         .map(x => [db[x[0]]['name'], x[1]]);
 };
 
@@ -133,10 +148,10 @@ const getDstPorts = async (dstIp) => {
     }
 };
 
-const tcpScanner = (probes) => {
+const tcpScanner = async (probes) => {
     const probeNames = Object.keys(probes);
+    const promises = [];
     let srcPort = 60000;
-    let promises = [];
 
     for (const name of probeNames) {
         const probe = probes[name];
@@ -150,9 +165,9 @@ const tcpScanner = (probes) => {
     return promises;
 };
 
-const icmpScanner = (probes) => {
+const icmpScanner = async (probes) => {
     const probeNames = Object.keys(probes);
-    let promises = [];
+    const promises = [];
 
     for (const name of probeNames) {
         const probe = probes[name];
@@ -165,30 +180,64 @@ const icmpScanner = (probes) => {
     return promises;
 };
 
+const seqScanner = async (probes) => {
+    const sleep = (ms) => new Promise(resolve =>
+        setTimeout(() => resolve(), ms)
+    );
+
+    const promises = [];
+    let srcPort = 60100;
+
+    // the probe sending order can not be changed
+    for (const name of ['SEQ1', 'SEQ2', 'SEQ3', 'SEQ4', 'SEQ5', 'SEQ6']) {
+        promises.push(sniffer.sniff(`tcp dst port ${srcPort}`, probes[name]));
+        sender.send(srcIp, srcPort++, dstIp, probes[name]);
+
+        if (name !== 'SEQ6') await sleep(100);
+    }
+
+    return promises;
+};
+
 const mergeFingerprintItems = (fingerprint) => {
     const result = fingerprint;
 
-    let DFI = "O";
-    const dfs = [result['IE1'].DFI, result['IE2'].DFI];
-    if (dfs[0] && dfs[1]) DFI = 'Y';
-    else if (!dfs[0] && !dfs[1]) DFI = 'N';
-    else if (dfs[0] && !dfs[1]) DFI = 'S';
+    // merge IE
+    // let DFI = "O";
+    // const dfs = [result['IE1'].DFI, result['IE2'].DFI];
+    // if (dfs[0] && dfs[1]) DFI = 'Y';
+    // else if (!dfs[0] && !dfs[1]) DFI = 'N';
+    // else if (dfs[0] && !dfs[1]) DFI = 'S';
 
-    let CD = 'O';
-    const cds = [result['IE1'].CD, result['IE2'].CD];
-    if (cds[0] === 'Z' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'Z';
-    else if (cds[0] === 'S' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'S';
+    // let CD = 'O';
+    // const cds = [result['IE1'].CD, result['IE2'].CD];
+    // if (cds[0] === 'Z' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'Z';
+    // else if (cds[0] === 'S' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'S';
 
-    let TG = result["IE1"].TG;
+    // let TG = result["IE1"].TG;
 
-    delete result['IE1'];
-    delete result['IE2'];
-    result['IE'] = {
-        "R": "Y",
-        "DFI": DFI,
-        "CD": CD,
-        "TG": TG
-    };
+    // delete result['IE1'];
+    // delete result['IE2'];
+    // result['IE'] = {
+    //     "R": "Y",
+    //     "DFI": DFI,
+    //     "CD": CD,
+    //     "TG": TG
+    // };
+
+    // merge SEQ
+    result['WIN'] = {};
+    result['OPS'] = {};
+    for (const name of Object.keys(result)) {
+        if (name === undefined) continue;
+        if (!name.startsWith('SEQ') || name === 'SEQ') continue;
+        const idx = name[3];
+
+        result['WIN'][`W${idx}`] = result[name]['W'];
+        result['OPS'][`O${idx}`] = result[name]['O'];
+
+        delete result[name];
+    }
 
     return result;
 };
@@ -199,11 +248,14 @@ const main = async () => {
     const probeNames = Object.keys(probes);
     const loadDbPromise = loadDb(dbPath);
 
-    const promises = [tcpScanner(probes), icmpScanner(probes)].flat();
+    // const promises = [tcpScanner(probes), icmpScanner(probes)].flat();
+    const promises_ = [seqScanner(probes)];//.flatMap(async x => await x);
+    const promises = await promises_[0];
     let fingerprint = {};
 
-    (await Promise.all(promises)).forEach((elem, idx) =>
-        fingerprint[probeNames[idx]] = elem
+    console.log(promises);
+    (await Promise.all(promises)).forEach((elem) =>
+        fingerprint[elem.name] = elem
     );
 
     fingerprint = mergeFingerprintItems(fingerprint);

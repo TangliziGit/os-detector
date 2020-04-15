@@ -1,7 +1,7 @@
 const IcmpProbe = require('./probes').IcmpProbe;
 const pcap = require('pcap');
 
-const WAIT_TIME = 3000;
+const WAIT_TIME = 5000;
 
 const listen = (filter, probe) => {
     const session = pcap.createSession('wlp3s0', { filter: filter });
@@ -49,10 +49,10 @@ const tcpOption = (rawBuffer) => {
         } else if (kind === 4) {
             result += 'S';
         } else if (kind === 8) {
-            const TSval = (BigInt(optionBuffer[pos+2]) << 24n) + (BigInt(optionBuffer[pos+3]) << 16) +
-                (BigInt(optionBuffer[pos+4]) << 8) + BigInt(optionBuffer[pos+5]);
-            const TSecr = (BigInt(optionBuffer[pos+6]) << 24n) + (BigInt(optionBuffer[pos+7]) << 16) +
-                (BigInt(optionBuffer[pos+8]) << 8) + BigInt(optionBuffer[pos+9]);
+            const TSval = (BigInt(optionBuffer[pos+2]) << 24n) + (BigInt(optionBuffer[pos+3]) << 16n) +
+                (BigInt(optionBuffer[pos+4]) << 8n) + BigInt(optionBuffer[pos+5]);
+            const TSecr = (BigInt(optionBuffer[pos+6]) << 24n) + (BigInt(optionBuffer[pos+7]) << 16n) +
+                (BigInt(optionBuffer[pos+8]) << 8n) + BigInt(optionBuffer[pos+9]);
 
             const T1 = (TSval === 0n)? '0': '1';
             const T2 = (TSecr === 0n)? '0': '1';
@@ -95,6 +95,7 @@ const tcpAnalyser = (ipPacket, rawBuffer, probe) => {
         TG <<= 1;
 
     return {
+        "name": probe.name,
         "R": "Y",
         "DF": (ipPacket.flags.doNotFragment)? "Y": "N",
         "W": tcpPacket.windowSize.toString(16),
@@ -120,6 +121,7 @@ const icmpAnalyser = (ipPacket, rawBuffer, probe) => {
         TG <<= 1;
 
     return {
+        "name": probe.name,
         "R": "Y",
         "DFI": false, // ipPacket.flags.doNotFragment,
         "CD": CD,
@@ -144,6 +146,7 @@ const ecnAnalyser = (ipPacket, rawBuffer, probe) => {
     else if (!ece && !cwr) CC = 'N';
 
     return {
+        "name": probe.name,
         "R": "Y",
         "DF": (ipPacket.flags.doNotFragment)? "Y": "N",
         "W": tcpPacket.windowSize.toString(16),
@@ -151,6 +154,18 @@ const ecnAnalyser = (ipPacket, rawBuffer, probe) => {
         "O": tcpOption(rawBuffer),
         "CC": CC,
     };
+};
+
+const seqAnalyser = (ipPacket, rawBuffer, probe) => {
+    if (ipPacket === null) return {"R": "N"};
+
+    const tcpPacket = ipPacket.payload;
+
+    return {
+        "name": probe.name,
+        "W": tcpPacket.windowSize.toString(16),
+        "O": tcpOption(rawBuffer),
+    }
 };
 
 const analyser = {
@@ -162,7 +177,13 @@ const analyser = {
     "T7": tcpAnalyser,
     "IE1": icmpAnalyser,
     "IE2": icmpAnalyser,
-    "ECN": ecnAnalyser
+    "ECN": ecnAnalyser,
+    "SEQ1": seqAnalyser,
+    "SEQ2": seqAnalyser,
+    "SEQ3": seqAnalyser,
+    "SEQ4": seqAnalyser,
+    "SEQ5": seqAnalyser,
+    "SEQ6": seqAnalyser,
 };
 
 const sniff = async (filter, probe) => {
