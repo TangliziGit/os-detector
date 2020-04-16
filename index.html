@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OS-Detector</title>
+    <style>
+        table, th, td {
+            border: 1px solid black;
+            padding: 5px;
+        }
+
+        thead {
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+
+<h1> OS - Detector </h1>
+<p>A simple os detector, based on nmap-os-db active os fingerprint, implemented by nodejs.</p>
+<a href="https://github.com/TangliziGit/os-detector">https://github.com/TangliziGit/os-detector</a>
+<hr />
+<br />
+
+<label>
+    <input id="text" type="text" placeholder="Enter the ip to scan" />
+    <input id="post" type="button" value="scan"/>
+    <p>State: <strong id="state">waiting your input</strong></span>
+
+    <table id='table' style="display: none">
+        <thead>
+            <tr><td>Type</td> <td>Prob</td> </tr>
+        </thead>
+        <tbody id="result">
+            <tr></tr>
+        </tbody>
+    </table>
+</label>
+
+<script>
+    const table = document.querySelector("#table");
+    const text = document.querySelector("#text").value;
+    const input = document.querySelector("#post");
+    const result = document.querySelector("#result");
+    const state = document.querySelector("#state");
+
+    input.addEventListener('click', () => {
+        state.innerHTML = 'scanning...';
+        fetch('/', {
+            method: "POST",
+            body: JSON.stringify({"ip": text}),
+            headers: {'content-type': "application/json"}
+        })
+            .then(x => {
+                console.log(x);
+                return x.json();
+            })
+            .then(xs => {
+                console.log(xs);
+                while (result.firstChild)
+                    result.removeChild(result.lastChild);
+
+                let cnt = 0;
+                for (const key of Object.keys(xs)) {
+                    const value = xs[key];
+                    if (cnt++ > 10) break;
+                    result.innerHTML += `<tr> <td>${key}</td> <td>${value}</td> </tr>`;
+                }
+
+                table.setAttribute('style', '');
+                state.innerHTML = 'done.';
+            }).catch((err) => {
+                state.innerHTML = 'error. please scan again.';
+            })
+    });
+</script>
+
+</body>
+</html>

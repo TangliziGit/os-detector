@@ -1,5 +1,6 @@
 const _ = require('lodash');
 const fs = require('fs');
+const path = require('path');
 const spawn = require('child_process').spawn;
 const readline = require('readline');
 const probeSet = require('./probes.js');
@@ -7,8 +8,7 @@ const sender = require('./sender.js');
 const sniffer = require('./sniffer.js');
 
 const srcIp = '192.168.0.103';
-const dstIp = '39.106.185.26';
-const dbPath = 'nmap-os-db';
+const dbPath = path.join(__dirname, 'nmap-os-db');
 
 let matchPoints = {};
 let db = [];
@@ -119,7 +119,7 @@ const matchOS = (fingerprint) => {
     }
 
     let totalMatchPoint = 0.0;
-    for (const key of Object.keys(fingerprint))
+    for (const key of Object.keys(fingerprint)) if (fingerprint[key])
         for (const itemKey of Object.keys(fingerprint[key]))
             if (matchPoints[key][itemKey] !== undefined)
                 totalMatchPoint += parseInt(matchPoints[key][itemKey].value);
@@ -128,7 +128,7 @@ const matchOS = (fingerprint) => {
         .filter(x => db[x[0]]['class'] !== undefined)
         .filter(x => db[x[0]]['class'][1] !== 'embedded')
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 20)
+        .slice(0, 40)
         .map(x => [db[x[0]]['name'], x[1] / totalMatchPoint])
         .groupBy(x => x[0])
         .mapValues(x => _(x).maxBy(x => x[1])[1])
@@ -146,6 +146,7 @@ const getDstPorts = async (dstIp) => {
     let [open, closed] = [null, null];
 
     for await (const line of liner) {
+        console.log(line);
         const result = [closeRegex.exec(line), openRegex.exec(line)];
 
         if (result[0] !== null) closed = result[0][1];
@@ -156,7 +157,7 @@ const getDstPorts = async (dstIp) => {
     }
 };
 
-const tcpScanner = async (probes) => {
+const tcpScanner = async (probes, dstIp) => {
     const probeNames = Object.keys(probes);
     const promises = [];
     let srcPort = 60000;
@@ -173,7 +174,7 @@ const tcpScanner = async (probes) => {
     return promises;
 };
 
-const icmpScanner = async (probes) => {
+const icmpScanner = async (probes, dstIp) => {
     const probeNames = Object.keys(probes);
     const promises = [];
 
@@ -188,7 +189,7 @@ const icmpScanner = async (probes) => {
     return promises;
 };
 
-const seqScanner = async (probes) => {
+const seqScanner = async (probes, dstIp) => {
     const sleep = (ms) => new Promise(resolve =>
         setTimeout(() => resolve(), ms)
     );
@@ -207,7 +208,7 @@ const seqScanner = async (probes) => {
     return promises;
 };
 
-const udpScanner = async (probes) => {
+const udpScanner = async (probes, dstIp) => {
     const promises = [];
     let srcPort = 60200;
 
@@ -262,15 +263,15 @@ const mergeFingerprintItems = (fingerprint) => {
     return result;
 };
 
-const main = async () => {
-    // const [openPort, closedPort] = await getDstPorts(dstIp);
-    const probes = probeSet.setPort([80, 3000]);
+const scan = async (dstIp) => {
     const loadDbPromise = loadDb(dbPath);
+    const [openPort, closedPort] = await getDstPorts(dstIp);
+    const probes = probeSet.setPort(openPort, closedPort);
 
     // You can not write the code below, because flatMap return an array of promises, which is async yet.
     // const promises = [tcpScanner, icmpScanner, seqScanner].flatMap(async x => await x(probes));
-    const promises = [await tcpScanner(probes), await icmpScanner(probes),
-        await seqScanner(probes), await udpScanner(probes)].flat();
+    const promises = [await tcpScanner(probes, dstIp), await icmpScanner(probes, dstIp),
+        await seqScanner(probes, dstIp), await udpScanner(probes, dstIp)].flat();
     let fingerprint = {};
 
     (await Promise.all(promises)).forEach((elem) =>
@@ -280,11 +281,12 @@ const main = async () => {
     fingerprint = mergeFingerprintItems(fingerprint);
 
     await loadDbPromise;
-    const os = matchOS(fingerprint);
-
-    console.log('fingerprint', fingerprint);
-    console.log(os);
-    process.exit(0);
+    console.log(fingerprint);
+    return matchOS(fingerprint);
+    // process.exit(0);
 };
 
-main();
+// scan('');
+module.exports = {
+    scan: scan
+};

@@ -270,7 +270,7 @@ const probes = {
     "U1": UdpProbe.fromUdpName('U1', false),
 };
 
-const setPort = ([opening, closed]) => {
+const setPort = (opening, closed) => {
     console.log(`opening: ${opening}, closed: ${closed}`);
     for (const name of Object.keys(probes)) {
         const probe = probes[name];

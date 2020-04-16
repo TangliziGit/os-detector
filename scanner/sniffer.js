@@ -15,6 +15,7 @@ const listen = (filter, probe) => {
 
             if (!(probe instanceof IcmpProbe) || probe.getIpLength() === ip.length) {
                 captured = true;
+                session.close();
                 resolve([ip, raw_packet.buf]);
             }
         });
@@ -212,10 +213,10 @@ const analyser = {
 
 const sniff = async (filter, probe) => {
     const [ipPacket, rawBuffer] = await listen(filter, probe);
-    const fingerprint = analyser[probe.name](ipPacket, rawBuffer, probe);
+    const result = analyser[probe.name](ipPacket, rawBuffer, probe);
 
-    console.log(probe.name, probe.port, fingerprint);
-    return fingerprint;
+    console.log(result);
+    return result;
 };
 
 module.exports = {
