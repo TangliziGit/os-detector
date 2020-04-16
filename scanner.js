@@ -120,16 +120,19 @@ const matchOS = (fingerprint) => {
 
     let totalMatchPoint = 0.0;
     for (const key of Object.keys(fingerprint))
-        for (const itemKey of Object.keys(fingerprint[key])) if (itemKey !== 'name') {
-            totalMatchPoint += parseInt(matchPoints[key][itemKey].value);
-        }
+        for (const itemKey of Object.keys(fingerprint[key]))
+            if (matchPoints[key][itemKey] !== undefined)
+                totalMatchPoint += parseInt(matchPoints[key][itemKey].value);
 
-    return results
+    return _(results)
         .filter(x => db[x[0]]['class'] !== undefined)
         .filter(x => db[x[0]]['class'][1] !== 'embedded')
         .sort((a, b) => b[1] - a[1])
         .slice(0, 20)
-        .map(x => [db[x[0]]['name'], x[1] / totalMatchPoint]);
+        .map(x => [db[x[0]]['name'], x[1] / totalMatchPoint])
+        .groupBy(x => x[0])
+        .mapValues(x => _(x).maxBy(x => x[1])[1])
+        .value();
 };
 
 const getDstPorts = async (dstIp) => {
@@ -204,6 +207,16 @@ const seqScanner = async (probes) => {
     return promises;
 };
 
+const udpScanner = async (probes) => {
+    const promises = [];
+    let srcPort = 60200;
+
+    promises.push(sniffer.sniff(`udp dst port ${srcPort}`, probes['U1']));
+    sender.send(srcIp, srcPort, dstIp, probes['U1']);
+
+    return promises;
+};
+
 const mergeFingerprintItems = (fingerprint) => {
     const result = fingerprint;
 
@@ -231,6 +244,8 @@ const mergeFingerprintItems = (fingerprint) => {
     };
 
     // merge SEQ
+    result["T1"] = result["SEQ1"].T1;
+
     result['WIN'] = {};
     result['OPS'] = {};
     for (const name of Object.keys(result)) {
@@ -254,7 +269,8 @@ const main = async () => {
 
     // You can not write the code below, because flatMap return an array of promises, which is async yet.
     // const promises = [tcpScanner, icmpScanner, seqScanner].flatMap(async x => await x(probes));
-    const promises = [await tcpScanner(probes), await icmpScanner(probes), await seqScanner(probes)].flat();
+    const promises = [await tcpScanner(probes), await icmpScanner(probes),
+        await seqScanner(probes), await udpScanner(probes)].flat();
     let fingerprint = {};
 
     (await Promise.all(promises)).forEach((elem) =>

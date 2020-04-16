@@ -1,7 +1,7 @@
 const IcmpProbe = require('./probes').IcmpProbe;
 const pcap = require('pcap');
 
-const WAIT_TIME = 8000;
+const WAIT_TIME = 4000;
 
 const listen = (filter, probe) => {
     const session = pcap.createSession('wlp3s0', { filter: filter });
@@ -161,10 +161,33 @@ const seqAnalyser = (ipPacket, rawBuffer, probe) => {
 
     const tcpPacket = ipPacket.payload;
 
+    if (probe.name === 'SEQ1')
+        return {
+            "name": probe.name,
+            "W": tcpPacket.windowSize.toString(16),
+            "O": tcpOption(rawBuffer),
+            "T1": tcpAnalyser(ipPacket, rawBuffer, probe)
+        };
+
     return {
         "name": probe.name,
         "W": tcpPacket.windowSize.toString(16),
         "O": tcpOption(rawBuffer),
+    }
+};
+
+const udpAnalyser = (ipPacket, rawBuffer, probe) => {
+    if (ipPacket === null) return {"name": probe.name, "R": "N"};
+
+    let TG = ipPacket.ttl, bitnum = 0;
+    while (TG !== 1) {bitnum+=1; TG >>= 1;}
+    if ((TG = 1 << bitnum ) < ipPacket.ttl)
+        TG <<= 1;
+
+    return {
+        "R": "Y",
+        "DF": (ipPacket.flags.doNotFragment)? "Y": "N",
+        "TG": TG.toString(16),
     }
 };
 
@@ -184,13 +207,14 @@ const analyser = {
     "SEQ4": seqAnalyser,
     "SEQ5": seqAnalyser,
     "SEQ6": seqAnalyser,
+    "U1": udpAnalyser
 };
 
 const sniff = async (filter, probe) => {
     const [ipPacket, rawBuffer] = await listen(filter, probe);
     const fingerprint = analyser[probe.name](ipPacket, rawBuffer, probe);
 
-    // console.log(probe.name, probe.port, fingerprint);
+    console.log(probe.name, probe.port, fingerprint);
     return fingerprint;
 };
 
