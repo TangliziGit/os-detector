@@ -10,6 +10,7 @@ const srcIp = '192.168.0.103';
 const dstIp = '39.106.185.26';
 const dbPath = 'nmap-os-db';
 
+let matchPoints = {};
 let db = [];
 
 const loadDb = async (dbPath) => {
@@ -44,15 +45,24 @@ const loadDb = async (dbPath) => {
         input: fs.createReadStream(dbPath)
     });
 
+    let state = 'normal';
     let fingerprint = {};
     for await (const line of liner) {
         if (line.startsWith('#')) continue;
         if (line === '') {
+            state = 'normal';
             db.push(fingerprint);
             continue;
         }
 
         switch (true) {
+            case line.startsWith('MatchPoints'):
+                state = 'match';
+                break;
+            case state === 'match':
+                const matchName = /[^(]+/.exec(line)[0];
+                matchPoints[matchName] = parseFingerprintItem(line);
+                break;
             case line.startsWith('Fingerprint'):
                 fingerprint = {};
                 fingerprint['name'] = line.split(' ').slice(1).join(' ');
@@ -70,6 +80,7 @@ const loadDb = async (dbPath) => {
                 break;
         }
     }
+
 };
 
 const matchOS = (fingerprint) => {
@@ -77,7 +88,7 @@ const matchOS = (fingerprint) => {
 
     for (let idx = 0; idx < db.length; idx++) {
         const template = db[idx];
-        let matchCount = 0;
+        let matchPoint = 0;
 
         for (const key of Object.keys(template)) {
             if (fingerprint[key] === undefined) continue;
@@ -90,41 +101,35 @@ const matchOS = (fingerprint) => {
                 switch (templateValue.type) {
                     case 'value':
                         if (templateValue.value === value)
-                            matchCount++;
+                            matchPoint += parseInt(matchPoints[key][itemKey].value);
                         break;
                     case 'range':
                         if (templateValue.value[0] <= value && value <= templateValue.value[1])
-                            matchCount++;
+                            matchPoint += parseInt(matchPoints[key][itemKey].value);
                         break;
                     case 'or':
                         if (templateValue.value.includes(value))
-                            matchCount++;
+                            matchPoint += parseInt(matchPoints[key][itemKey].value);
                         break;
                 }
             }
         }
 
-        results.push([idx, matchCount]);
+        results.push([idx, matchPoint]);
     }
 
-    // match os without version
-    const os = _(results)
-        .filter(x => db[x[0]]['class'] !== undefined)
-        .filter(x => db[x[0]]['class'][1] !== 'embedded')
-        .groupBy(x => db[x[0]]['class'][1])
-        .mapValues(xs => xs
-            .map(x => x[1])
-            .reduce((x, y) => x+y, 0)
-        ).value();
+    let totalMatchPoint = 0.0;
+    for (const key of Object.keys(fingerprint))
+        for (const itemKey of Object.keys(fingerprint[key])) if (itemKey !== 'name') {
+            totalMatchPoint += parseInt(matchPoints[key][itemKey].value);
+        }
 
-    // return Object.entries(os)
-    //     .sort((a, b) => b[1] - a[1])
-    //     .slice(0, 20);
     return results
         .filter(x => db[x[0]]['class'] !== undefined)
         .filter(x => db[x[0]]['class'][1] !== 'embedded')
         .sort((a, b) => b[1] - a[1])
-        .map(x => [db[x[0]]['name'], x[1]]);
+        .slice(0, 20)
+        .map(x => [db[x[0]]['name'], x[1] / totalMatchPoint]);
 };
 
 const getDstPorts = async (dstIp) => {
@@ -203,27 +208,27 @@ const mergeFingerprintItems = (fingerprint) => {
     const result = fingerprint;
 
     // merge IE
-    // let DFI = "O";
-    // const dfs = [result['IE1'].DFI, result['IE2'].DFI];
-    // if (dfs[0] && dfs[1]) DFI = 'Y';
-    // else if (!dfs[0] && !dfs[1]) DFI = 'N';
-    // else if (dfs[0] && !dfs[1]) DFI = 'S';
+    let DFI = "O";
+    const dfs = [result['IE1'].DFI, result['IE2'].DFI];
+    if (dfs[0] && dfs[1]) DFI = 'Y';
+    else if (!dfs[0] && !dfs[1]) DFI = 'N';
+    else if (dfs[0] && !dfs[1]) DFI = 'S';
 
-    // let CD = 'O';
-    // const cds = [result['IE1'].CD, result['IE2'].CD];
-    // if (cds[0] === 'Z' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'Z';
-    // else if (cds[0] === 'S' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'S';
+    let CD = 'O';
+    const cds = [result['IE1'].CD, result['IE2'].CD];
+    if (cds[0] === 'Z' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'Z';
+    else if (cds[0] === 'S' && (cds[1] === 'Z' || cds[1] === 'Z')) CD = 'S';
 
-    // let TG = result["IE1"].TG;
+    let TG = result["IE1"].TG;
 
-    // delete result['IE1'];
-    // delete result['IE2'];
-    // result['IE'] = {
-    //     "R": "Y",
-    //     "DFI": DFI,
-    //     "CD": CD,
-    //     "TG": TG
-    // };
+    delete result['IE1'];
+    delete result['IE2'];
+    result['IE'] = {
+        "R": "Y",
+        "DFI": DFI,
+        "CD": CD,
+        "TG": TG
+    };
 
     // merge SEQ
     result['WIN'] = {};
@@ -243,17 +248,15 @@ const mergeFingerprintItems = (fingerprint) => {
 };
 
 const main = async () => {
-    // const probes = probeSet.setPort(await getDstPorts(dstIp));
+    // const [openPort, closedPort] = await getDstPorts(dstIp);
     const probes = probeSet.setPort([80, 3000]);
-    const probeNames = Object.keys(probes);
     const loadDbPromise = loadDb(dbPath);
 
-    // const promises = [tcpScanner(probes), icmpScanner(probes)].flat();
-    const promises_ = [seqScanner(probes)];//.flatMap(async x => await x);
-    const promises = await promises_[0];
+    // You can not write the code below, because flatMap return an array of promises, which is async yet.
+    // const promises = [tcpScanner, icmpScanner, seqScanner].flatMap(async x => await x(probes));
+    const promises = [await tcpScanner(probes), await icmpScanner(probes), await seqScanner(probes)].flat();
     let fingerprint = {};
 
-    console.log(promises);
     (await Promise.all(promises)).forEach((elem) =>
         fingerprint[elem.name] = elem
     );
@@ -263,7 +266,7 @@ const main = async () => {
     await loadDbPromise;
     const os = matchOS(fingerprint);
 
-    console.log(fingerprint);
+    console.log('fingerprint', fingerprint);
     console.log(os);
     process.exit(0);
 };

@@ -1,7 +1,7 @@
 const IcmpProbe = require('./probes').IcmpProbe;
 const pcap = require('pcap');
 
-const WAIT_TIME = 5000;
+const WAIT_TIME = 8000;
 
 const listen = (filter, probe) => {
     const session = pcap.createSession('wlp3s0', { filter: filter });
@@ -66,7 +66,7 @@ const tcpOption = (rawBuffer) => {
 };
 
 const tcpAnalyser = (ipPacket, rawBuffer, probe) => {
-    if (ipPacket === null) return {"R":"N"};
+    if (ipPacket === null) return {"name": probe.name, "R":"N"};
 
     const tcpPacket = ipPacket.payload;
 
@@ -107,7 +107,7 @@ const tcpAnalyser = (ipPacket, rawBuffer, probe) => {
 };
 
 const icmpAnalyser = (ipPacket, rawBuffer, probe) => {
-    if (ipPacket === null) return {"R": "N"};
+    if (ipPacket === null) return {"name": probe.name, "R": "N"};
 
     const icmpPacket = ipPacket.payload;
 
@@ -130,7 +130,7 @@ const icmpAnalyser = (ipPacket, rawBuffer, probe) => {
 };
 
 const ecnAnalyser = (ipPacket, rawBuffer, probe) => {
-    if (ipPacket === null) return {"S": "N"};
+    if (ipPacket === null) return {"name": probe.name, "S": "N"};
 
     const tcpPacket = ipPacket.payload;
 
@@ -157,7 +157,7 @@ const ecnAnalyser = (ipPacket, rawBuffer, probe) => {
 };
 
 const seqAnalyser = (ipPacket, rawBuffer, probe) => {
-    if (ipPacket === null) return {"R": "N"};
+    if (ipPacket === null) return {"name": probe.name, "R": "N"};
 
     const tcpPacket = ipPacket.payload;
 
@@ -190,7 +190,7 @@ const sniff = async (filter, probe) => {
     const [ipPacket, rawBuffer] = await listen(filter, probe);
     const fingerprint = analyser[probe.name](ipPacket, rawBuffer, probe);
 
-    console.log(probe.name, probe.port, fingerprint);
+    // console.log(probe.name, probe.port, fingerprint);
     return fingerprint;
 };
 
