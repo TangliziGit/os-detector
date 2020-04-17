@@ -1,11 +1,13 @@
 const path = require('path');
+const bodyParser = require('body-parser');
 const express = require('express');
 const scanner = require('./scanner/scanner');
 
 const app = express();
 const root = '/';
 
-app.use(express.json());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({'extended': true}));
 
 app.get(root, (req, resp) => {
     resp.sendFile(path.join(__dirname, 'index.html'));
