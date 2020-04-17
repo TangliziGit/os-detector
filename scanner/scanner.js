@@ -7,7 +7,7 @@ const probeSet = require('./probes.js');
 const sender = require('./sender.js');
 const sniffer = require('./sniffer.js');
 
-const srcIp = '192.168.0.103';
+const srcIp = '';
 const dbPath = path.join(__dirname, 'nmap-os-db');
 
 let matchPoints = {};
