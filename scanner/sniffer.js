@@ -4,7 +4,7 @@ const pcap = require('pcap');
 const WAIT_TIME = 4000;
 
 const listen = (filter, probe) => {
-    const session = pcap.createSession('eth0', { filter: filter });
+    const session = pcap.createSession('wlp3s0', { filter: filter });
 
     return new Promise((resolve) => {
 

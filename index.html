@@ -23,6 +23,9 @@
 
 <h1> OS - Detector </h1>
 <p>A simple os detector, based on nmap-os-db active os fingerprint, implemented by nodejs.</p>
+<p>Support DNS lookup, but only support IPv4 family.</p>
+<p>Please make sure there are <strong>unfiltered</strong> open and closed ports on the server to be scanned.</p>
+<p>For example, `www.baidu.com` have not unfiltered closed ports, it can not be detected clearly.</p>
 <a href="https://github.com/TangliziGit/os-detector">https://github.com/TangliziGit/os-detector</a>
 <hr />
 <br />
@@ -44,7 +47,7 @@
 
 <script>
     const table = document.querySelector("#table");
-    const text = document.querySelector("#text").value;
+    const text = document.querySelector("#text");
     const input = document.querySelector("#post");
     const result = document.querySelector("#result");
     const state = document.querySelector("#state");
@@ -53,7 +56,7 @@
         state.innerHTML = 'scanning...';
         fetch('/', {
             method: "POST",
-            body: JSON.stringify({"ip": text}),
+            body: JSON.stringify({"ip": text.value}),
             headers: {'Content-Type': "application/json"}
         })
             .then(x => {
@@ -75,7 +78,7 @@
                 table.setAttribute('style', '');
                 state.innerHTML = 'done.';
             }).catch((err) => {
-                state.innerHTML = 'error. please scan again.';
+                state.innerHTML = 'input error, please check the net address and scan again.';
             })
     });
 </script>

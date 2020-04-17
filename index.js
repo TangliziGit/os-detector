@@ -1,3 +1,5 @@
+const dns = require('dns');
+const util = require('util');
 const path = require('path');
 const bodyParser = require('body-parser');
 const express = require('express');
@@ -14,13 +16,18 @@ app.get(root, (req, resp) => {
 });
 
 app.post(root, async (req, resp) => {
-    const ip = req.body.ip;
+    const address = req.body.ip;
 
     let result;
     try {
-        result = await scanner.scan(ip);
+        const addr = await util.promisify(dns.lookup)(address);
+        if (addr.family !== 4) throw new Error();
+
+        console.log(addr, address);
+        result = await scanner.scan(addr.address);
         resp.send(result);
     } catch (e) {
+        console.log(e);
         resp.status(404).send("");
     }
 });
