@@ -61,24 +61,26 @@
         })
             .then(x => {
                 console.log(x);
-                return x.json();
+                return x.json()
             })
             .then(xs => {
                 console.log(xs);
-                while (result.firstChild)
-                    result.removeChild(result.lastChild);
+                if (xs.ok) {
+                    while (result.firstChild)
+                        result.removeChild(result.lastChild);
 
-                let cnt = 0;
-                for (const key of Object.keys(xs)) {
-                    const value = xs[key];
-                    if (cnt++ > 10) break;
-                    result.innerHTML += `<tr> <td>${key}</td> <td>${value}</td> </tr>`;
+                    let cnt = 0;
+                    for (const key of Object.keys(xs.content)) {
+                        const value = xs.content[key];
+                        if (cnt++ > 10) break;
+                        result.innerHTML += `<tr> <td>${key}</td> <td>${value}</td> </tr>`;
+                    }
+
+                    table.setAttribute('style', '');
+                    state.innerHTML = 'done.';
+                } else {
+                    state.innerHTML = xs.content;
                 }
-
-                table.setAttribute('style', '');
-                state.innerHTML = 'done.';
-            }).catch((err) => {
-                state.innerHTML = 'input error, please check the net address and scan again.';
             })
     });
 </script>
