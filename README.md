@@ -20,7 +20,7 @@
 
 ## 数据流图
 
-![Stream](https://github.com/TangliziGit/os-detector/document/stream.png)
+![Stream](https://raw.githubusercontent.com/TangliziGit/os-detector/master/document/stream.png)
 
 
 ## 咋运行？
